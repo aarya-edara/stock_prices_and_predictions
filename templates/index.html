@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Prices, Predictions and Changes</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+<nav class="top-nav">
+    <a href="{{ url_for('index') }}" class="site-name">Stock Prices, Predictions and Changes</a>
+    <ul class="nav-links">
+        <li><a href="{{ url_for('index') }}">Home</a></li>
+    </ul>
+</nav>
+
+<main>
+
+    <!-- SEARCH -->
+    <section class="search-panel">
+        <div class="home-search search-container">
+            <span class="search-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="7"></circle>
+                    <line x1="16" y1="16" x2="21" y2="21"></line>
+                </svg>
+            </span>
+            <input
+                aria-label="Search for a company"
+                type="search"
+                id="stock-search"
+                class="search-input"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="Search for a company or ticker (e.g. Coca-Cola, AAPL)"
+            >
+            <ul class="search-results" id="suggestions" hidden></ul>
+        </div>
+
+        <div class="quick-picks" id="quick-picks"></div>
+        <p class="status" id="status"></p>
+    </section>
+
+    <!-- DASHBOARD (filled in by script.js once a stock is loaded) -->
+    <div id="dashboard" hidden>
+
+        <section class="result-head company-header">
+            <div>
+                <h1 id="company-name">—</h1>
+                <span class="symbol" id="company-symbol">—</span>
+            </div>
+            <div class="result-price">
+                <span class="price" id="price">—</span>
+                <span class="change" id="change">—</span>
+            </div>
+        </section>
+        <p>Data as of <span id="stat-date">—</span></p>
+
+        <!-- TODAY'S STOCK INFORMATION -->
+        <section>
+            <p class="section-label">TODAY</p>
+            <h2>Current Stock Information</h2>
+            <div class="info-table">
+                <div class="info-row"><span>Open</span><strong id="stat-open">—</strong></div>
+                <div class="info-row"><span>Previous Close</span><strong id="stat-prev-close">—</strong></div>
+                <div class="info-row"><span>Daily Range</span><strong id="stat-range">—</strong></div>
+                <div class="info-row"><span>Volume</span><strong id="stat-volume">—</strong></div>
+            </div>
+        </section>
+
+        <!-- NEXT DAY PREDICTION -->
+        <section>
+            <p class="section-label">MACHINE LEARNING</p>
+            <h2>Next-Day Prediction</h2>
+            <div class="prediction-card prediction-main">
+                <span class="prediction-label">NEXT TRADING DAY</span>
+                <p>Predicted next close</p>
+                <h3 id="outlook-next-close">—</h3>
+                <p id="outlook-next-change">—</p>
+            </div>
+        </section>
+
+        <!-- FORECAST HORIZONS -->
+        <section>
+            <p class="section-label">OUTLOOK</p>
+            <h2>Prediction Horizons</h2>
+            <div class="prediction-grid">
+                <div class="prediction-card">
+                    <span class="prediction-label">5 Day Prediction</span>
+                    <strong id="horizon-5day">—</strong>
+                    <span id="horizon-5day-range">—</span>
+                </div>
+                <div class="prediction-card">
+                    <span class="prediction-label">1 Month Prediction</span>
+                    <strong id="horizon-1month">—</strong>
+                    <span id="horizon-1month-range">—</span>
+                </div>
+                <div class="prediction-card">
+                    <span class="prediction-label">3 Month Prediction</span>
+                    <strong id="horizon-3month">—</strong>
+                    <span id="horizon-3month-range">—</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- HISTORICAL PRICE -->
+        <section class="chart-section">
+            <p class="section-label">PRICE HISTORY</p>
+            <h2 id="history-chart-title">Closing Stock Price</h2>
+            <div class="chart-container"><canvas id="history-chart"></canvas></div>
+        </section>
+
+        <!-- ACTUAL VS PREDICTED -->
+        <section class="chart-section">
+            <p class="section-label">MODEL TEST</p>
+            <h2 id="avp-chart-title">Actual vs Predicted Next-Day Close</h2>
+            <div class="chart-container"><canvas id="avp-chart"></canvas></div>
+        </section>
+
+        <!-- LAST 100 TRADING DAYS -->
+        <section class="chart-section">
+            <p class="section-label">RECENT PERFORMANCE</p>
+            <h2>Actual vs Predicted — Last 100 Trading Days</h2>
+            <div class="chart-container"><canvas id="avp-recent-chart"></canvas></div>
+        </section>
+
+        <!-- THREE MONTH FORECAST -->
+        <section class="chart-section">
+            <p class="section-label">FORECAST</p>
+            <h2 id="forecast-chart-title">3-Month Forecast</h2>
+            <p>Median Monte Carlo forecast with a 90% uncertainty range.</p>
+            <div class="chart-container"><canvas id="forecast-chart"></canvas></div>
+        </section>
+
+        <!-- FORECAST TABLE -->
+        <section>
+            <p class="section-label">FORECAST DATA</p>
+            <h2>3-Month Forecast Table</h2>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr><th>Date</th><th>Low (5%)</th><th>Predicted</th><th>High (95%)</th></tr>
+                    </thead>
+                    <tbody id="forecast-table-body"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- FEATURE IMPORTANCE TABLE -->
+        <section>
+            <h2>Feature Importance Table</h2>
+            <div class="table-container">
+                <table>
+                    <thead><tr><th>Feature</th><th>Importance</th></tr></thead>
+                    <tbody id="importance-table-body"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- MODEL PERFORMANCE -->
+        <section class="outlook">
+            <p class="section-label">MODEL PERFORMANCE</p>
+            <div class="stat-line">
+                <div class="stat"><dt>MAE (model)</dt><dd id="perf-mae">—</dd></div>
+                <div class="stat"><dt>MAE (baseline)</dt><dd id="perf-baseline-mae">—</dd></div>
+                <div class="stat"><dt>R²</dt><dd id="perf-r2">—</dd></div>
+                <div class="stat"><dt>Beats baseline?</dt><dd id="perf-beats-baseline">—</dd></div>
+            </div>
+            <p class="disclaimer">
+                Predictions are generated by a Random Forest model trained on historical price
+                and volume data. This is not financial advice.
+            </p>
+        </section>
+
+        <!-- FORECAST INFORMATION -->
+        <section>
+            <p class="section-label">FORECAST SETTINGS</p>
+            <h2>Forecast Information</h2>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <span class="stat-label">Monte Carlo Simulations</span>
+                    <strong id="simulation-count">—</strong>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">Forecast Trading Days</span>
+                    <strong id="forecast-days">—</strong>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">Generated From</span>
+                    <strong id="forecast-generated-date">—</strong>
+                </div>
+            </div>
+        </section>
+
+    </div>
+
+    <footer class="site-footer">
+        <p>Data via Yahoo Finance (<code>yfinance</code>). Not financial advice.</p>
+    </footer>
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+
+</body>
+</html>

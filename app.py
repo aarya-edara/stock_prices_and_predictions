@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, render_template
+from flask import Flask, jsonify, render_template, request
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
@@ -51,6 +51,16 @@ PREDICTORS = [
     "Return_Lag3",
 ]
 
+FORECAST_DAYS = 63       # ~3 months of trading days
+N_SIMULATIONS = 300      # number of simulated future paths
+
+# In-memory caches, keyed to the latest trading day so they auto-regenerate
+# once new data comes in, but repeated requests for the same symbol on the
+# same day reuse the (slow) trained model + Monte Carlo run instead of
+# recomputing everything from scratch.
+STOCK_RESPONSE_CACHE = {}   # {symbol: {"asOf": "YYYY-MM-DD", "response": {...}}}
+COMPANY_NAME_CACHE = {}     # {symbol: name} — company names rarely change
+
 
 def flatten_yfinance_columns(data):
     if isinstance(data.columns, pd.MultiIndex):
@@ -93,12 +103,155 @@ def add_features(data):
 
 
 def company_name_for(symbol):
+    if symbol in COMPANY_NAME_CACHE:
+        return COMPANY_NAME_CACHE[symbol]
+
     try:
         ticker = yf.Ticker(symbol)
         info = ticker.info
-        return info.get("longName") or info.get("shortName") or symbol
+        name = info.get("longName") or info.get("shortName") or symbol
     except Exception:
-        return symbol
+        name = symbol
+
+    COMPANY_NAME_CACHE[symbol] = name
+    return name
+
+
+def _close_features_batch(close_paths, volume_ratio):
+    """
+    Vectorized equivalent of add_features()'s price-derived columns, for a
+    batch of simulated close-price histories (rows = simulations, columns =
+    trailing days, most recent last, i.e. column -1 is "today"). Volume_Ratio
+    is passed in directly since it's identical across every simulation (see
+    run_monte_carlo_forecast) rather than recomputed per path.
+    """
+    returns = np.diff(close_paths, axis=1) / close_paths[:, :-1]
+    close = close_paths[:, -1]
+
+    def ma(window):
+        return close_paths[:, -window:].mean(axis=1)
+
+    return {
+        "Close": close,
+        "Return": returns[:, -1],
+        "Return_Lag1": returns[:, -2],
+        "Return_Lag2": returns[:, -3],
+        "Return_Lag3": returns[:, -4],
+        "Return_Lag5": returns[:, -6],
+        "Return_Lag20": returns[:, -21],
+        "Price_MA3": ma(3),
+        "Price_MA5": ma(5),
+        "Price_MA20": ma(20),
+        "Price_MA30": ma(30),
+        "Price_vs_MA5": close / ma(5),
+        "Price_vs_MA20": close / ma(20),
+        "Price_vs_MA30": close / ma(30),
+        "Volume_Ratio": np.full(close_paths.shape[0], volume_ratio),
+        "Volatility5": returns[:, -5:].std(axis=1, ddof=1),
+        "Volatility20": returns[:, -20:].std(axis=1, ddof=1),
+        "Momentum60": close / close_paths[:, -61] - 1,
+        "Momentum90": close / close_paths[:, -91] - 1,
+        "Momentum10": close / close_paths[:, -11] - 1,
+    }
+
+
+def run_monte_carlo_forecast(model, data, train, current_close):
+    """
+    Runs an N_SIMULATIONS-path Monte Carlo simulation to produce a 3-month
+    forecast band (median + 90% confidence interval), plus a 5-day / 1-month
+    / 3-month horizon summary. This is the slow part of a stock request —
+    callers should cache the result per symbol per trading day.
+
+    All simulations are advanced together, one trading day at a time, with a
+    single batched model.predict() call per day (N_SIMULATIONS rows) instead
+    of one call per simulation per day. A single-row RandomForest predict()
+    has enough fixed overhead that N_SIMULATIONS * FORECAST_DAYS individual
+    calls cost minutes; one call per day over a small batch costs well under
+    a second, since the per-call overhead is paid once instead of ~19,000
+    times.
+    """
+    train_predictions_for_bias = model.predict(train[PREDICTORS])
+    bias = (train["Tomorrow_Return"] - train_predictions_for_bias).mean()
+    residuals = (train["Tomorrow_Return"] - train_predictions_for_bias - bias).values
+
+    # Volume never depends on the simulated price, and every path estimates
+    # each future day's volume the same way (mean of the trailing 20 days),
+    # so the volume trajectory — and Volume_Ratio, which is derived from it
+    # — is identical across every simulation and only needs to be computed
+    # once, sequentially, instead of once per path.
+    volume_history = data["Volume"].tail(150).to_numpy(dtype=float).tolist()
+    volume_ratio_by_day = []
+    for _ in range(FORECAST_DAYS):
+        volume_ma20 = float(np.mean(volume_history[-20:]))
+        volume_ratio_by_day.append(volume_history[-1] / volume_ma20)
+        volume_history.append(volume_ma20)
+
+    # Only the trailing window needed for the longest rolling feature
+    # (Momentum90) plus buffer — nothing looks back further than 90 days.
+    # Every simulation starts from the same real history and diverges as
+    # each day's predicted returns are applied.
+    close_paths = np.tile(
+        data["Close"].tail(150).to_numpy(dtype=float), (N_SIMULATIONS, 1)
+    )
+
+    forecast_dates = []
+    next_date = data.index[-1]
+    for _ in range(FORECAST_DAYS):
+        next_date = next_date + pd.Timedelta(days=1)
+        while next_date.weekday() >= 5:
+            next_date += pd.Timedelta(days=1)
+        forecast_dates.append(next_date)
+
+    rng = np.random.default_rng(0)
+    all_paths = np.zeros((FORECAST_DAYS, N_SIMULATIONS))
+
+    original_n_jobs = model.n_jobs
+    model.n_jobs = 1
+
+    for day in range(FORECAST_DAYS):
+        features = _close_features_batch(close_paths, volume_ratio_by_day[day])
+        X = pd.DataFrame({name: features[name] for name in PREDICTORS})
+
+        point_predictions = model.predict(X) + bias
+        sampled_noise = rng.choice(residuals, size=N_SIMULATIONS)
+        predicted_returns = point_predictions + sampled_noise
+
+        predicted_close = close_paths[:, -1] * (1 + predicted_returns)
+        close_paths = np.column_stack([close_paths, predicted_close])
+        all_paths[day, :] = predicted_close
+
+    model.n_jobs = original_n_jobs
+
+    median_line = np.median(all_paths, axis=1)
+    lower_line = np.percentile(all_paths, 5, axis=1)
+    upper_line = np.percentile(all_paths, 95, axis=1)
+
+    forecast_list = [
+        {
+            "date": d.strftime("%Y-%m-%d"),
+            "median": round(float(m), 2),
+            "lower90": round(float(l), 2),
+            "upper90": round(float(u), 2),
+        }
+        for d, m, l, u in zip(forecast_dates, median_line, lower_line, upper_line)
+    ]
+
+    horizon_indices = {"fiveDay": 5, "oneMonth": 21, "threeMonth": FORECAST_DAYS}
+    horizons = {}
+    for key, trading_days_ahead in horizon_indices.items():
+        idx = min(trading_days_ahead, len(forecast_list)) - 1
+        row = forecast_list[idx]
+        horizons[key] = {
+            "date": row["date"],
+            "medianPrice": row["median"],
+            "medianChangePercent": round((row["median"] - current_close) / current_close * 100, 3),
+            "lowerPrice": row["lower90"],
+            "lowerChangePercent": round((row["lower90"] - current_close) / current_close * 100, 3),
+            "upperPrice": row["upper90"],
+            "upperChangePercent": round((row["upper90"] - current_close) / current_close * 100, 3),
+        }
+
+    return forecast_list, horizons
 
 
 @app.route("/")
@@ -108,8 +261,6 @@ def index():
 
 @app.route("/api/search")
 def search():
-    from flask import request
-
     query = request.args.get("q", "").strip()
 
     if not query:
@@ -185,7 +336,21 @@ def stock(symbol):
         if not required.issubset(set(data.columns)):
             return jsonify({"error": "Yahoo Finance returned incomplete data."}), 500
 
+        # Yahoo sometimes returns a trailing row for the current, still-in-
+        # progress trading day with a Volume figure but no OHLC yet — drop
+        # any such incomplete rows so "latest close" isn't NaN.
+        data = data.dropna(subset=["Close"])
+
+        if data.empty:
+            return jsonify({"error": f"No stock data found for {symbol}."}), 404
+
         data.index.name = "Date"
+
+        as_of_date = data.index[-1].strftime("%Y-%m-%d")
+        cached = STOCK_RESPONSE_CACHE.get(symbol)
+        if cached and cached["asOf"] == as_of_date:
+            return jsonify(cached["response"])
+
         data = add_features(data)
 
         model_data = data.dropna(
@@ -290,10 +455,14 @@ def stock(symbol):
 
         company_name = company_name_for(symbol)
 
+        forecast_list, horizons = run_monte_carlo_forecast(
+            model, data, train, current_close
+        )
+
         response = {
             "symbol": symbol,
             "companyName": company_name,
-            "asOf": data.index[-1].strftime("%Y-%m-%d"),
+            "asOf": as_of_date,
 
             "today": {
                 "close": round(current_close, 2),
@@ -348,7 +517,17 @@ def stock(symbol):
                 }
                 for name, value in importance.items()
             ],
+
+            "forecast3Month": forecast_list,
+            "horizonSummary": horizons,
+            "forecastInfo": {
+                "simulations": N_SIMULATIONS,
+                "forecastDays": FORECAST_DAYS,
+                "generatedFromDate": as_of_date,
+            },
         }
+
+        STOCK_RESPONSE_CACHE[symbol] = {"asOf": as_of_date, "response": response}
 
         return jsonify(response)
 
@@ -360,173 +539,4 @@ def stock(symbol):
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# ---------------------------------------------------------------------------
-# ADD near the top of app.py, alongside your other imports:
-# ---------------------------------------------------------------------------
-import numpy as np  # you likely already have this
-
-# In-memory cache: {symbol: {"asOf": "YYYY-MM-DD", "forecast": [...], "horizons": {...}}}
-# Keyed to the latest trading day, so it auto-regenerates once a new day of
-# data comes in, but repeated searches for the same company on the same day
-# reuse the cached (slow) Monte Carlo run instead of recomputing it.
-FORECAST_CACHE = {}
-
-
-# ---------------------------------------------------------------------------
-# ADD this function anywhere above your @app.route definitions
-# ---------------------------------------------------------------------------
-def run_monte_carlo_forecast(model, data, train, predictors, current_close, as_of_date):
-    """
-    Runs a 300-path Monte Carlo simulation to produce a 3-month forecast band
-    (median + 90% confidence interval), plus a 5-day/1-month/3-month summary.
-    Cached per symbol per trading day since this is the slow part.
-    """
-    FORECAST_DAYS = 63
-    N_SIMULATIONS = 300
-
-    train_predictions_for_bias = model.predict(train[predictors])
-    bias = (train["Tomorrow_Return"] - train_predictions_for_bias).mean()
-    residuals = (train["Tomorrow_Return"] - train_predictions_for_bias - bias).values
-
-    def simulate_one_path(seed):
-        rng = np.random.default_rng(seed)
-        future_data = data[["Close", "Volume"]].tail(150).copy()
-        path_closes = []
-        path_dates = []
-
-        for _ in range(FORECAST_DAYS):
-            last_date = future_data.index[-1]
-            next_date = last_date + pd.Timedelta(days=1)
-            while next_date.weekday() >= 5:
-                next_date += pd.Timedelta(days=1)
-
-            feature_data = add_features(future_data)
-            latest_features = feature_data.iloc[[-1]]
-
-            point_prediction = model.predict(latest_features[predictors])[0] + bias
-            sampled_noise = rng.choice(residuals)
-            predicted_return = point_prediction + sampled_noise
-
-            previous_close = future_data["Close"].iloc[-1]
-            predicted_close = previous_close * (1 + predicted_return)
-            estimated_volume = future_data["Volume"].tail(20).mean()
-
-            future_data.loc[next_date, "Close"] = predicted_close
-            future_data.loc[next_date, "Volume"] = estimated_volume
-
-            path_closes.append(predicted_close)
-            path_dates.append(next_date)
-
-        return path_dates, path_closes
-
-    # avoid per-call parallel-backend overhead across ~19,000 predict() calls
-    original_n_jobs = model.n_jobs
-    model.n_jobs = 1
-
-    all_paths = np.zeros((FORECAST_DAYS, N_SIMULATIONS))
-    forecast_dates = None
-    for sim in range(N_SIMULATIONS):
-        dates, closes = simulate_one_path(seed=sim)
-        all_paths[:, sim] = closes
-        if forecast_dates is None:
-            forecast_dates = dates
-
-    model.n_jobs = original_n_jobs
-
-    median_line = np.median(all_paths, axis=1)
-    lower_line = np.percentile(all_paths, 5, axis=1)
-    upper_line = np.percentile(all_paths, 95, axis=1)
-
-    forecast_list = [
-        {
-            "date": d.strftime("%Y-%m-%d"),
-            "median": round(float(m), 2),
-            "lower90": round(float(l), 2),
-            "upper90": round(float(u), 2),
-        }
-        for d, m, l, u in zip(forecast_dates, median_line, lower_line, upper_line)
-    ]
-
-    horizon_indices = {"fiveDay": 5, "oneMonth": 21, "threeMonth": FORECAST_DAYS}
-    horizons = {}
-    for key, trading_days_ahead in horizon_indices.items():
-        idx = min(trading_days_ahead, len(forecast_list)) - 1
-        row = forecast_list[idx]
-        horizons[key] = {
-            "date": row["date"],
-            "medianPrice": row["median"],
-            "medianChangePercent": round((row["median"] - current_close) / current_close * 100, 3),
-            "lowerPrice": row["lower90"],
-            "lowerChangePercent": round((row["lower90"] - current_close) / current_close * 100, 3),
-            "upperPrice": row["upper90"],
-            "upperChangePercent": round((row["upper90"] - current_close) / current_close * 100, 3),
-        }
-
-    return forecast_list, horizons
-
-
-# ---------------------------------------------------------------------------
-# ADD this near the top of your stock() route, right after you compute
-# `current_close` — this checks the cache before doing anything slow
-# ---------------------------------------------------------------------------
-#
-#   as_of_date = data.index[-1].strftime("%Y-%m-%d")
-#   cached = FORECAST_CACHE.get(symbol)
-#
-#   if cached and cached["asOf"] == as_of_date:
-#       forecast_list = cached["forecast"]
-#       horizons = cached["horizons"]
-#   else:
-#       forecast_list, horizons = run_monte_carlo_forecast(
-#           model, data, train, PREDICTORS, current_close, as_of_date
-#       )
-#       FORECAST_CACHE[symbol] = {
-#           "asOf": as_of_date,
-#           "forecast": forecast_list,
-#           "horizons": horizons,
-#       }
-#
-# ---------------------------------------------------------------------------
-# ADD these two keys into your `response = {...}` dict, alongside the
-# existing keys like "today", "nextDayPrediction", etc.
-# ---------------------------------------------------------------------------
-#
-#   "forecast3Month": forecast_list,
-#   "horizonSummary": horizons,
+    app.run(debug=True, port=5050)
