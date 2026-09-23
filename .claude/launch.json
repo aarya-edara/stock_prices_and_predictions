@@ -6,6 +6,12 @@
       "runtimeExecutable": "/Users/aarya/PycharmProjects/machinefailure/.venv/bin/python",
       "runtimeArgs": ["app.py"],
       "port": 5050
+    },
+    {
+      "name": "static-site",
+      "runtimeExecutable": "/Users/aarya/PycharmProjects/machinefailure/.venv/bin/python",
+      "runtimeArgs": ["-m", "http.server", "8090"],
+      "port": 8090
     }
   ]
 }

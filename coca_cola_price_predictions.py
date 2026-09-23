@@ -24,6 +24,11 @@ data = yf.download(
 if isinstance(data.columns, pd.MultiIndex):
     data.columns = data.columns.get_level_values(0)
 
+# Yahoo sometimes returns a trailing row for the current, still-in-progress
+# trading day with a Volume figure but no OHLC yet — drop any such
+# incomplete rows so "latest close" isn't NaN.
+data = data.dropna(subset=["Close"])
+
 data.index.name = "Date"
 
 data.to_csv("coca_cola_stock.csv")
@@ -410,69 +415,43 @@ bias = (train["Tomorrow_Return"] - train_predictions_for_bias).mean()
 residuals = (train["Tomorrow_Return"] - train_predictions_for_bias - bias).values
 
 
-def calculate_features(df):
-    df = df.copy()
-    df["Return"] = df["Close"].pct_change()
-    df["Return_Lag1"] = df["Return"].shift(1)
-    df["Return_Lag2"] = df["Return"].shift(2)
-    df["Return_Lag3"] = df["Return"].shift(3)
-    df["Return_Lag5"] = df["Return"].shift(5)
-    df["Return_Lag20"] = df["Return"].shift(20)
-    df["Price_MA3"] = df["Close"].rolling(3).mean()
-    df["Price_MA5"] = df["Close"].rolling(5).mean()
-    df["Price_MA20"] = df["Close"].rolling(20).mean()
-    df["Price_MA30"] = df["Close"].rolling(30).mean()
-    df["Price_vs_MA5"] = df["Close"] / df["Price_MA5"]
-    df["Price_vs_MA20"] = df["Close"] / df["Price_MA20"]
-    df["Price_vs_MA30"] = df["Close"] / df["Price_MA30"]
-    df["Volume_MA20"] = df["Volume"].rolling(20).mean()
-    df["Volume_Ratio"] = df["Volume"] / df["Volume_MA20"]
-    df["Volatility5"] = df["Return"].rolling(5).std()
-    df["Volatility20"] = df["Return"].rolling(20).std()
-    df["Momentum10"] = df["Close"].pct_change(10)
-    df["Momentum60"] = df["Close"].pct_change(60)
-    df["Momentum90"] = df["Close"].pct_change(90)
-    return df
+def _close_features_batch(close_paths, volume_ratio):
+    """
+    Vectorized equivalent of calculate_features()'s price-derived columns,
+    for a batch of simulated close-price histories (rows = simulations,
+    columns = trailing days, most recent last, i.e. column -1 is "today").
+    Volume_Ratio is passed in directly since it doesn't depend on price and
+    is identical across every simulation (see the caller) rather than
+    recomputed per path.
+    """
+    returns = np.diff(close_paths, axis=1) / close_paths[:, :-1]
+    close = close_paths[:, -1]
 
+    def ma(window):
+        return close_paths[:, -window:].mean(axis=1)
 
-def simulate_one_path(seed):
-    rng = np.random.default_rng(seed)
-    # Only the trailing window needed for the longest rolling feature
-    # (Momentum90) plus buffer — carrying the full multi-decade history
-    # into every simulated day was recomputing rolling stats over ~7,300+
-    # rows, 300 x 63 times, for no benefit (nothing looks back further
-    # than 90 days). This cuts the work down enormously.
-    future_data = data[["Close", "Volume"]].tail(150).copy()
-    path_closes = []
-    path_dates = []
-
-    for _ in range(FORECAST_DAYS):
-        last_date = future_data.index[-1]
-        next_date = last_date + pd.Timedelta(days=1)
-        while next_date.weekday() >= 5:
-            next_date += pd.Timedelta(days=1)
-
-        feature_data = calculate_features(future_data)
-        latest_features = feature_data.iloc[[-1]]
-
-        # model's point prediction, bias-corrected, PLUS a bootstrapped
-        # historical error — this creates a distribution of plausible
-        # futures instead of one falsely-confident line
-        point_prediction = model.predict(latest_features[predictors])[0] + bias
-        sampled_noise = rng.choice(residuals)
-        predicted_return = point_prediction + sampled_noise
-
-        previous_close = future_data["Close"].iloc[-1]
-        predicted_close = previous_close * (1 + predicted_return)
-        estimated_volume = future_data["Volume"].tail(20).mean()
-
-        future_data.loc[next_date, "Close"] = predicted_close
-        future_data.loc[next_date, "Volume"] = estimated_volume
-
-        path_closes.append(predicted_close)
-        path_dates.append(next_date)
-
-    return path_dates, path_closes
+    return {
+        "Close": close,
+        "Return": returns[:, -1],
+        "Return_Lag1": returns[:, -2],
+        "Return_Lag2": returns[:, -3],
+        "Return_Lag3": returns[:, -4],
+        "Return_Lag5": returns[:, -6],
+        "Return_Lag20": returns[:, -21],
+        "Price_MA3": ma(3),
+        "Price_MA5": ma(5),
+        "Price_MA20": ma(20),
+        "Price_MA30": ma(30),
+        "Price_vs_MA5": close / ma(5),
+        "Price_vs_MA20": close / ma(20),
+        "Price_vs_MA30": close / ma(30),
+        "Volume_Ratio": np.full(close_paths.shape[0], volume_ratio),
+        "Volatility5": returns[:, -5:].std(axis=1, ddof=1),
+        "Volatility20": returns[:, -20:].std(axis=1, ddof=1),
+        "Momentum60": close / close_paths[:, -61] - 1,
+        "Momentum90": close / close_paths[:, -91] - 1,
+        "Momentum10": close / close_paths[:, -11] - 1,
+    }
 
 
 # The forecast is only valid as of the most recent actual trading day it
@@ -497,26 +476,59 @@ if needs_regeneration:
     print(f"RUNNING {N_SIMULATIONS} SIMULATED FORECAST PATHS")
     print(f"(generating fresh — as of {latest_actual_date})")
 
-    # IMPORTANT: model.predict() gets called ~19,000 times in this loop
-    # (300 sims x 63 days), one row at a time. With n_jobs=-1, sklearn
-    # re-dispatches to its multi-process parallel backend on EVERY call,
-    # and that per-call overhead dwarfs the actual computation for a
-    # single-row prediction — this alone can make the loop take drastically
-    # longer, to the point of looking hung. Switch to single-threaded
-    # prediction just for this loop, then restore the original setting.
+    # All simulations are advanced together, one trading day at a time, with
+    # a single batched model.predict() call per day (N_SIMULATIONS rows)
+    # instead of one call per (simulation, day) pair. A single-row
+    # RandomForest predict() has enough fixed overhead that
+    # N_SIMULATIONS * FORECAST_DAYS individual calls (~19,000 of them) cost
+    # several minutes; batching cuts that to a couple of seconds since the
+    # per-call overhead is paid once per day instead of ~19,000 times.
+
+    # Volume never depends on the simulated price, and every path estimates
+    # each future day's volume the same way (mean of the trailing 20 days),
+    # so the volume trajectory — and Volume_Ratio, which is derived from it
+    # — is identical across every simulation and only needs to be computed
+    # once, sequentially, instead of once per path.
+    volume_history = data["Volume"].tail(150).to_numpy(dtype=float).tolist()
+    volume_ratio_by_day = []
+    for _ in range(FORECAST_DAYS):
+        volume_ma20 = float(np.mean(volume_history[-20:]))
+        volume_ratio_by_day.append(volume_history[-1] / volume_ma20)
+        volume_history.append(volume_ma20)
+
+    # Only the trailing window needed for the longest rolling feature
+    # (Momentum90) plus buffer — nothing looks back further than 90 days.
+    # Every simulation starts from the same real history and diverges as
+    # each day's predicted returns are applied.
+    close_paths = np.tile(
+        data["Close"].tail(150).to_numpy(dtype=float), (N_SIMULATIONS, 1)
+    )
+
+    forecast_dates = []
+    next_date = data.index[-1]
+    for _ in range(FORECAST_DAYS):
+        next_date = next_date + pd.Timedelta(days=1)
+        while next_date.weekday() >= 5:
+            next_date += pd.Timedelta(days=1)
+        forecast_dates.append(next_date)
+
+    rng = np.random.default_rng(0)
+    all_paths = np.zeros((FORECAST_DAYS, N_SIMULATIONS))
+
     original_n_jobs = model.n_jobs
     model.n_jobs = 1
 
-    all_paths = np.zeros((FORECAST_DAYS, N_SIMULATIONS))
-    forecast_dates = None
+    for day in range(FORECAST_DAYS):
+        features = _close_features_batch(close_paths, volume_ratio_by_day[day])
+        X = pd.DataFrame({name: features[name] for name in predictors})
 
-    for sim in range(N_SIMULATIONS):
-        dates, closes = simulate_one_path(seed=sim)
-        all_paths[:, sim] = closes
-        if forecast_dates is None:
-            forecast_dates = dates
-        if (sim + 1) % 50 == 0:
-            print(f"  ...completed {sim + 1}/{N_SIMULATIONS} simulations")
+        point_predictions = model.predict(X) + bias
+        sampled_noise = rng.choice(residuals, size=N_SIMULATIONS)
+        predicted_returns = point_predictions + sampled_noise
+
+        predicted_close = close_paths[:, -1] * (1 + predicted_returns)
+        close_paths = np.column_stack([close_paths, predicted_close])
+        all_paths[day, :] = predicted_close
 
     model.n_jobs = original_n_jobs
 
