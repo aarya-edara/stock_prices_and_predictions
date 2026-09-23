@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coca-Cola (KO) | Stock Prices, Predictions and Changes</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<nav class="top-nav">
+        <a href="index.html"
+           class="site-name">
+
+            Coca-Cola (KO) | Stock Prices, Predictions and Changes
+
+        </a>
+    <ul class="nav-links">
+        <li><a href="index.html">Home</a></li>
+    </ul>
+</nav>
+
+<main class="company-page">
+
+    <!-- company header -->
+    <section class="company-header">
+        <p class="section-label">COMPANY</p>
+        <h1 id="company-name">Coca-Cola</h1>
+        <p id="company-symbol">KO</p>
+
+        <div class="main-price">
+            <span id="price">—</span>
+            <span id="change">—</span>
+        </div>
+
+        <p>Data as of <span id="stat-date">—</span></p>
+    </section>
+
+    <!-- TODAY'S STOCK INFORMATION -->
+    <section>
+        <p class="section-label">TODAY</p>
+        <h2>Current Stock Information</h2>
+
+        <div class="info-table">
+            <div class="info-row">
+                <span>Open</span>
+                <strong id="stat-open">—</strong>
+            </div>
+
+            <div class="info-row">
+                <span>Previous Close</span>
+                <strong id="stat-prev-close">—</strong>
+            </div>
+
+            <div class="info-row">
+                <span>Daily Range</span>
+                <strong id="stat-range">—</strong>
+            </div>
+
+            <div class="info-row">
+                <span>Volume</span>
+                <strong id="stat-volume">—</strong>
+            </div>
+        </div>
+
+
+    </section>
+
+    <!-- NEXT DAY PREDICTION -->
+    <section>
+        <p class="section-label">MACHINE LEARNING</p>
+        <h2>Next-Day Prediction</h2>
+
+        <div class="prediction-card prediction-main">
+            <span class="prediction-label">NEXT TRADING DAY</span>
+            <p>Predicted next close</p>
+            <h3 id="outlook-next-close">—</h3>
+            <p id="outlook-next-change">—</p>
+        </div>
+    </section>
+
+    <!-- FORECAST HORIZONS -->
+    <section>
+        <p class="section-label">OUTLOOK</p>
+        <h2>Prediction Horizons</h2>
+
+        <div class="prediction-grid">
+
+            <div class="prediction-card">
+                <span class="prediction-label">5 Day Prediction</span>
+                <strong id="horizon-5day">—</strong>
+                <span id="horizon-5day-range">—</span>
+            </div>
+
+            <div class="prediction-card">
+                <span class="prediction-label">1 Month Prediction</span>
+                <strong id="horizon-1month">—</strong>
+                <span id="horizon-1month-range">—</span>
+            </div>
+
+            <div class="prediction-card">
+                <span class="prediction-label">3 Month Prediction</span>
+                <strong id="horizon-3month">—</strong>
+                <span id="horizon-3month-range">—</span>
+            </div>
+
+        </div>
+
+    </section>
+
+    <!-- HISTORICAL PRICE -->
+    <section class="chart-section">
+        <p class="section-label">PRICE HISTORY</p>
+        <h2 id="history-chart-title">Coca-Cola Closing Stock Price</h2>
+        <div class="chart-container">
+            <canvas id="history-chart"></canvas>
+        </div>
+    </section>
+
+    <!-- ACTUAL VS PREDICTED -->
+    <section class="chart-section">
+        <p class="section-label">MODEL TEST</p>
+        <h2 id="avp-chart-title">Actual vs Predicted Next-Day Close</h2>
+        <div class="chart-container">
+            <canvas id="avp-chart"></canvas>
+        </div>
+    </section>
+
+    <!-- LAST 100 TRADING DAYS -->
+    <section class="chart-section">
+        <p class="section-label">RECENT PERFORMANCE</p>
+        <h2>Actual vs Predicted — Last 100 Trading Days</h2>
+        <div class="chart-container">
+            <canvas id="avp-recent-chart"></canvas>
+        </div>
+    </section>
+
+    <!-- THREE MONTH FORECAST -->
+    <section class="chart-section">
+        <p class="section-label">FORECAST</p>
+        <h2 id="forecast-chart-title">Coca-Cola — 3-Month Forecast</h2>
+        <p>Median Monte Carlo forecast with a 90% uncertainty range.</p>
+
+        <div class="chart-container">
+            <canvas id="forecast-chart"></canvas>
+        </div>
+    </section>
+
+    <!-- FORECAST TABLE -->
+    <section>
+        <p class="section-label">FORECAST DATA</p>
+        <h2>3-Month Forecast Table</h2>
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Low (5%)</th>
+                        <th>Predicted</th>
+                        <th>High (95%)</th>
+                    </tr>
+                </thead>
+                <tbody id="forecast-table-body"></tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- PREDICTION TIMELINE -->
+    <section class="chart-section">
+        <p class="section-label">TIMELINE</p>
+        <h2 id="timeline-chart-title">Actual and Predicted Price Timeline</h2>
+
+        <div class="chart-container">
+            <canvas id="timeline-chart"></canvas>
+        </div>
+    </section>
+
+
+
+    <!-- FEATURE IMPORTANCE TABLE -->
+    <section>
+        <h2>Feature Importance Table</h2>
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Feature</th>
+                        <th>Importance</th>
+                    </tr>
+                </thead>
+                <tbody id="importance-table-body"></tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- FORECAST INFORMATION -->
+    <section>
+        <p class="section-label">FORECAST SETTINGS</p>
+        <h2>Forecast Information</h2>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <span class="stat-label">Monte Carlo Simulations</span>
+                <strong id="simulation-count">—</strong>
+            </div>
+
+            <div class="stat-card">
+                <span class="stat-label">Forecast Trading Days</span>
+                <strong id="forecast-days">—</strong>
+            </div>
+
+            <div class="stat-card">
+                <span class="stat-label">Generated From</span>
+                <strong id="forecast-generated-date">—</strong>
+            </div>
+        </div>
+    </section>
+
+    <p id="status"></p>
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="stock_data.js"></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+    const status = document.getElementById("status");
+
+    if (typeof STOCK_DATA === "undefined" || !STOCK_DATA.KO) {
+        status.textContent = "Coca-Cola data could not be loaded. Run coca_cola_price_predictions.py first.";
+        return;
+    }
+
+    const company = STOCK_DATA.KO;
+
+    function money(value) {
+        const number = Number(value);
+        if (Number.isNaN(number)) return "—";
+        return "$" + number.toFixed(2);
+    }
+
+    function number(value, decimals = 5) {
+        const result = Number(value);
+        if (Number.isNaN(result)) return "—";
+        return result.toFixed(decimals);
+    }
+
+    function volume(value) {
+        return Number(value).toLocaleString("en-US");
+    }
+
+    // COMPANY HEADER
+    document.getElementById("company-name").textContent = company.companyName;
+    document.getElementById("company-symbol").textContent = company.symbol;
+    document.getElementById("price").textContent = money(company.today.close);
+    document.getElementById("stat-date").textContent = company.asOf;
+
+    // DAILY CHANGE
+    const change = company.today.change;
+    const changePercent = company.today.changePercent;
+    const changeElement = document.getElementById("change");
+
+    changeElement.textContent =
+        (change >= 0 ? "▲ " : "▼ ") +
+        money(Math.abs(change)) +
+        " (" +
+        Math.abs(changePercent).toFixed(2) +
+        "%)";
+
+    changeElement.classList.toggle("positive", change >= 0);
+    changeElement.classList.toggle("negative", change < 0);
+
+    // TODAY'S STATS
+    document.getElementById("stat-open").textContent = money(company.today.open);
+    document.getElementById("stat-prev-close").textContent = money(company.today.previousClose);
+
+    document.getElementById("stat-range").textContent =
+        money(company.today.low) + " – " + money(company.today.high);
+    document.getElementById("stat-volume").textContent = volume(company.today.volume);
+
+    // NEXT DAY PREDICTION
+    document.getElementById("outlook-next-close").textContent =
+        money(company.nextDayPrediction.predictedClose);
+
+    const predictedChange = company.nextDayPrediction.predictedChangePercent;
+    const nextChangeElement = document.getElementById("outlook-next-change");
+
+    nextChangeElement.textContent =
+        (predictedChange >= 0 ? "▲ " : "▼ ") +
+        Math.abs(predictedChange).toFixed(3) +
+        "%";
+
+    nextChangeElement.classList.toggle("positive", predictedChange >= 0);
+    nextChangeElement.classList.toggle("negative", predictedChange < 0);
+
+
+    // HORIZON PREDICTIONS
+    function renderHorizon(priceId, rangeId, horizon) {
+        const priceElement = document.getElementById(priceId);
+        const rangeElement = document.getElementById(rangeId);
+        const arrow = horizon.medianChangePercent >= 0 ? "▲" : "▼";
+
+        priceElement.textContent =
+            money(horizon.medianPrice) +
+            " " +
+            arrow +
+            " " +
+            Math.abs(horizon.medianChangePercent).toFixed(2) +
+            "%";
+
+        rangeElement.textContent =
+            "90% range: " +
+            money(horizon.low) +
+            " – " +
+            money(horizon.high);
+
+        priceElement.classList.toggle("positive", horizon.medianChangePercent >= 0);
+        priceElement.classList.toggle("negative", horizon.medianChangePercent < 0);
+    }
+
+    renderHorizon(
+        "horizon-5day",
+        "horizon-5day-range",
+        company.horizonSummary.fiveDay
+    );
+
+    renderHorizon(
+        "horizon-1month",
+        "horizon-1month-range",
+        company.horizonSummary.oneMonth
+    );
+
+    renderHorizon(
+        "horizon-3month",
+        "horizon-3month-range",
+        company.horizonSummary.threeMonth
+    );
+
+    // FORECAST INFORMATION
+    document.getElementById("simulation-count").textContent =
+        company.forecastInfo.simulations;
+
+    document.getElementById("forecast-days").textContent =
+        company.forecastInfo.forecastDays;
+
+    document.getElementById("forecast-generated-date").textContent =
+        company.forecastInfo.generatedFromDate;
+
+    // CHART COLOURS
+    const styles = getComputedStyle(document.documentElement);
+    const ink = styles.getPropertyValue("--ink").trim() || "#ffffff";
+    const gain = styles.getPropertyValue("--gain").trim() || "#00ffe4";
+    const accent = styles.getPropertyValue("--accent").trim() || "#ffc1f0";
+
+    // STANDARD CHART OPTIONS
+    function chartOptions(xTitle = "Date", yTitle = "Price (USD)") {
+    return {
+        responsive: true,
+        maintainAspectRatio: false,
+
+        interaction: {
+            mode: "index",
+            intersect: false
+        },
+
+        plugins: {
+            legend: {
+                labels: {
+                    color: ink
+                }
+            }
+        },
+
+        scales: {
+            x: {
+                title: {
+                    display: true,
+                    text: xTitle,
+                    color: ink,
+                    font: {
+                        family: "IBM Plex Mono",
+                        size: 12
+                    }
+                },
+
+                ticks: {
+                    color: ink,
+                    maxTicksLimit: 10
+                },
+
+                grid: {
+                    display: false
+                },
+
+                border: {
+                    color: ink
+                }
+            },
+
+            y: {
+                title: {
+                    display: true,
+                    text: yTitle,
+                    color: ink,
+                    font: {
+                        family: "IBM Plex Mono",
+                        size: 12
+                    }
+                },
+
+                ticks: {
+                    color: ink,
+                    callback: function(value) {
+                        return "$" + value;
+                    }
+                },
+
+                grid: {
+                    color: "rgba(150,150,150,0.15)"
+                },
+
+                border: {
+                    color: ink
+                }
+            }
+        }
+    };
+}
+
+    // HISTORICAL PRICE CHART
+    new Chart(document.getElementById("history-chart"), {
+        type: "line",
+        data: {
+            labels: company.closePriceHistory.map(row => row.date),
+            datasets: [
+                {
+                    label: "Coca-Cola Close",
+                    data: company.closePriceHistory.map(row => row.close),
+                    borderColor: accent,
+                    borderWidth: 1.5,
+                    pointRadius: 0,
+                    tension: 0.1
+                }
+            ]
+        },
+        options: chartOptions()
+    });
+
+    // ACTUAL VS PREDICTED
+    new Chart(document.getElementById("avp-chart"), {
+        type: "line",
+        data: {
+            labels: company.actualVsPredicted.map(row => row.date),
+            datasets: [
+                {
+                    label: "Actual",
+                    data: company.actualVsPredicted.map(row => row.actual),
+                    borderColor: ink,
+                    borderWidth: 1.5,
+                    pointRadius: 0
+                },
+                {
+                    label: "Predicted",
+                    data: company.actualVsPredicted.map(row => row.predicted),
+                    borderColor: gain,
+                    borderWidth: 1.5,
+                    pointRadius: 0
+                }
+            ]
+        },
+        options: chartOptions()
+    });
+
+    // LAST 100 TRADING DAYS
+    const recent = company.actualVsPredicted.slice(-100);
+
+    new Chart(document.getElementById("avp-recent-chart"), {
+        type: "line",
+        data: {
+            labels: recent.map(row => row.date),
+            datasets: [
+                {
+                    label: "Actual",
+                    data: recent.map(row => row.actual),
+                    borderColor: ink,
+                    borderWidth: 2,
+                    pointRadius: 0
+                },
+                {
+                    label: "Predicted",
+                    data: recent.map(row => row.predicted),
+                    borderColor: gain,
+                    borderWidth: 2,
+                    pointRadius: 0
+                }
+            ]
+        },
+        options: chartOptions()
+    });
+
+    // THREE MONTH FORECAST
+    const recentHistory = company.closePriceHistory.slice(-40);
+    const forecast = company.forecast3Month;
+
+    const forecastLabels = [
+        ...recentHistory.map(row => row.date),
+        ...forecast.map(row => row.date)
+    ];
+
+    const actualForecastSeries = [
+        ...recentHistory.map(row => row.close),
+        ...forecast.map(() => null)
+    ];
+
+    const blankHistory = recentHistory.slice(0, -1).map(() => null);
+
+    const medianSeries = [
+        ...blankHistory,
+        recentHistory[recentHistory.length - 1].close,
+        ...forecast.map(row => row.predictedClose)
+    ];
+
+    const lowSeries = [
+        ...blankHistory,
+        recentHistory[recentHistory.length - 1].close,
+        ...forecast.map(row => row.lower90)
+    ];
+
+    const highSeries = [
+        ...blankHistory,
+        recentHistory[recentHistory.length - 1].close,
+        ...forecast.map(row => row.upper90)
+    ];
+
+    new Chart(document.getElementById("forecast-chart"), {
+        type: "line",
+        data: {
+            labels: forecastLabels,
+            datasets: [
+                {
+                    label: "Actual Close",
+                    data: actualForecastSeries,
+                    borderColor: ink,
+                    borderWidth: 2,
+                    pointRadius: 0
+                },
+                {
+                    label: "Median Forecast",
+                    data: medianSeries,
+                    borderColor: gain,
+                    borderWidth: 2,
+                    pointRadius: 0
+                },
+                {
+                    label: "Lower 90%",
+                    data: lowSeries,
+                    borderColor: accent,
+                    borderWidth: 1,
+                    borderDash: [5, 5],
+                    pointRadius: 0
+                },
+                {
+                    label: "Upper 90%",
+                    data: highSeries,
+                    borderColor: accent,
+                    borderWidth: 1,
+                    borderDash: [5, 5],
+                    pointRadius: 0
+                }
+            ]
+        },
+        options: chartOptions()
+    });
+
+    // PREDICTION TIMELINE
+    new Chart(document.getElementById("timeline-chart"), {
+        type: "line",
+        data: {
+            labels: company.predictionTimeline.map(row => row.date),
+            datasets: [
+                {
+                    label: "Actual",
+                    data: company.predictionTimeline.map(row => row.actual),
+                    borderColor: ink,
+                    borderWidth: 1.5,
+                    pointRadius: 0
+                },
+                {
+                    label: "Predicted",
+                    data: company.predictionTimeline.map(row => row.predicted),
+                    borderColor: gain,
+                    borderWidth: 1.5,
+                    pointRadius: 0
+                }
+            ]
+        },
+        options: chartOptions()
+    });
+
+
+
+    // FORECAST TABLE
+    const forecastTable = document.getElementById("forecast-table-body");
+
+    company.forecast3Month.forEach(function (row) {
+        const tr = document.createElement("tr");
+
+        tr.innerHTML = `
+            <td>${row.date}</td>
+            <td>${money(row.lower90)}</td>
+            <td>${money(row.predictedClose)}</td>
+            <td>${money(row.upper90)}</td>
+        `;
+
+        forecastTable.appendChild(tr);
+    });
+
+    // FEATURE IMPORTANCE TABLE
+    const importanceTable = document.getElementById("importance-table-body");
+
+    company.featureImportance.forEach(function (row) {
+        const tr = document.createElement("tr");
+
+        tr.innerHTML = `
+            <td>${row.feature}</td>
+            <td>${Number(row.importance).toFixed(5)}</td>
+        `;
+
+        importanceTable.appendChild(tr);
+    });
+});
+</script>
+
+</body>
+</html>
