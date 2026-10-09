@@ -18,8 +18,8 @@
 /* f3e8ff is pale purple */
 /* #ffc1f0 = pale pink */
 /* #c1ffee = pale turquoise */
-/* #ff57d6 = highlighter pink */
-/* #00ffe4 = highlighter green/bluish */
+/* #ff57d6 = fluorescent pink */
+/* #00ffe4 = fluorescent turquoise */
 
 
 * {
@@ -569,7 +569,7 @@ canvas {
   font-size: 0.9em;
 }
 
-/* PREDICTION CARDS */
+/* prediction cards */
 
 .prediction-grid {
     display: grid;
@@ -630,9 +630,7 @@ canvas {
 }
 
 
-/* =========================================================
-   INFORMATION TABLES
-   ========================================================= */
+/* information tables */
 
 .info-table {
     width: 100%;
@@ -669,9 +667,7 @@ canvas {
 }
 
 
-/* =========================================================
-   NORMAL TABLES
-   ========================================================= */
+/* normal tables */
 
 .table-container {
     width: 100%;
@@ -722,7 +718,7 @@ canvas {
 }
 
 
-/* CHART PANELS */
+/* chart panels */
 
 .chart-section {
     margin-top: 4rem;
@@ -748,7 +744,7 @@ canvas {
 }
 
 
-/* MODEL COMPARISON */
+/* model comparison */
 
 .model-comparison {
     margin-top: 1rem;
@@ -763,7 +759,7 @@ canvas {
 }
 
 
-/* MOBILE */
+/* mobile */
 
 @media (max-width: 700px) {
 
