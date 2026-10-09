@@ -24,9 +24,7 @@ data = yf.download(
 if isinstance(data.columns, pd.MultiIndex):
     data.columns = data.columns.get_level_values(0)
 
-# Yahoo sometimes returns a trailing row for the current, still-in-progress
-# trading day with a Volume figure but no OHLC yet — drop any such
-# incomplete rows so "latest close" isn't NaN.
+
 data = data.dropna(subset=["Close"])
 
 data.index.name = "Date"
@@ -60,11 +58,7 @@ plt.savefig(os.path.join(CHARTS_DIR, "1_closing_price.png"), dpi=150, bbox_inche
 plt.show(block=False)
 plt.pause(0.001)
 
-# CHANGED: predict tomorrow's RETURN instead of tomorrow's raw close price.
-# Random Forests can't extrapolate past the max value seen in training, so
-# predicting price directly breaks down once prices move past that range.
-# Returns stay in a roughly bounded range regardless of era, so the model
-# doesn't need to extrapolate.
+
 data["Tomorrow_Return"] = data["Close"].shift(-1) / data["Close"] - 1
 
 # return = percentage change in Coca-Cola's price from one trading day to the next
@@ -169,14 +163,13 @@ model = RandomForestRegressor(
     n_jobs=-1
 )
 
-# CHANGED: fit on Tomorrow_Return instead of Tomorrow_Close
+
+
 model.fit(train[predictors], train["Tomorrow_Return"])
 
-# CHANGED: this now produces predicted RETURNS, not prices
+
 predicted_returns = model.predict(test[predictors])
 
-# CHANGED: reconstruct predicted prices from predicted returns applied to
-# today's actual close, so we can still compare/plot on a price scale
 predicted_prices = test["Close"] * (1 + predicted_returns)
 
 # actual next-day close, for comparison purposes
@@ -194,7 +187,6 @@ print("Predictions:")
 print(results.tail(20))
 
 
-# CHANGED: metrics computed on returns (the model's actual prediction target)
 mae = mean_absolute_error(
     test["Tomorrow_Return"],
     predicted_returns
@@ -217,8 +209,7 @@ print("MAE:", mae)
 print("RMSE:", rmse)
 print("R²:", r2)
 
-# CHANGED: baseline is now "predict zero return" (i.e. tomorrow = today),
-# which is the natural baseline when predicting returns
+
 baseline_predictions = np.zeros(len(test))
 
 baseline_mae = mean_absolute_error(
@@ -362,14 +353,15 @@ latest = data.dropna(
     subset=predictors
 ).iloc[[-1]]
 
-# CHANGED: model now outputs a predicted RETURN
+
+
 next_return_prediction = model.predict(
     latest[predictors]
 )[0]
 
 current_close = latest["Close"].iloc[0]
 
-# CHANGED: reconstruct predicted price from predicted return
+
 next_close_prediction = current_close * (1 + next_return_prediction)
 
 print("NEXT-DAY PREDICTION")
@@ -385,45 +377,30 @@ print(
 )
 
 
-# 3-MONTH FUTURE FORECAST — MONTE CARLO WITH CONFIDENCE BAND
-
-# A single recursive path (predict day+1, feed it back in, predict day+2,
-# ...) gives one falsely-precise line with no sense of how wrong it might
-# be. Instead, this runs hundreds of simulated future paths, each nudged by
-# a randomly sampled historical error from the model's own past mistakes,
-# and reports a median line plus a 90% confidence band. That band is the
-# honest way to represent "the model doesn't really know" at a 3-month
-# horizon.
-
 
 FORECAST_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     "coca_cola_3_month_forecast.csv"
 )
-FORECAST_DAYS = 63       # ~3 months of trading days
-N_SIMULATIONS = 300      # number of simulated future paths
+
+# ~3 months of trading days
+FORECAST_DAYS = 63 
+# number of simulated future paths
+N_SIMULATIONS = 300      
 
 print("Forecast file path:", FORECAST_FILE)
 
-# bias correction, same idea as the next-day prediction above
+# bias correction 
 train_predictions_for_bias = model.predict(train[predictors])
 bias = (train["Tomorrow_Return"] - train_predictions_for_bias).mean()
 
-# the model's actual historical one-step errors — bootstrapped from these
-# to represent realistic day-to-day uncertainty, instead of pretending the
-# model is more precise than it is
+
 residuals = (train["Tomorrow_Return"] - train_predictions_for_bias - bias).values
 
 
 def _close_features_batch(close_paths, volume_ratio):
-    """
-    Vectorized equivalent of calculate_features()'s price-derived columns,
-    for a batch of simulated close-price histories (rows = simulations,
-    columns = trailing days, most recent last, i.e. column -1 is "today").
-    Volume_Ratio is passed in directly since it doesn't depend on price and
-    is identical across every simulation (see the caller) rather than
-    recomputed per path.
-    """
+
+    
     returns = np.diff(close_paths, axis=1) / close_paths[:, :-1]
     close = close_paths[:, -1]
 
@@ -454,12 +431,7 @@ def _close_features_batch(close_paths, volume_ratio):
     }
 
 
-# The forecast is only valid as of the most recent actual trading day it
-# was built from. Instead of caching forever (which meant manually deleting
-# the file every time you wanted fresh data), we store which trading day
-# generated it and auto-regenerate whenever that's out of date — so this
-# updates on its own once a day, the first time you run it after a new
-# trading day's data becomes available.
+
 latest_actual_date = data.index[-1].strftime("%Y-%m-%d")
 
 needs_regeneration = True
@@ -476,19 +448,7 @@ if needs_regeneration:
     print(f"RUNNING {N_SIMULATIONS} SIMULATED FORECAST PATHS")
     print(f"(generating fresh — as of {latest_actual_date})")
 
-    # All simulations are advanced together, one trading day at a time, with
-    # a single batched model.predict() call per day (N_SIMULATIONS rows)
-    # instead of one call per (simulation, day) pair. A single-row
-    # RandomForest predict() has enough fixed overhead that
-    # N_SIMULATIONS * FORECAST_DAYS individual calls (~19,000 of them) cost
-    # several minutes; batching cuts that to a couple of seconds since the
-    # per-call overhead is paid once per day instead of ~19,000 times.
-
-    # Volume never depends on the simulated price, and every path estimates
-    # each future day's volume the same way (mean of the trailing 20 days),
-    # so the volume trajectory — and Volume_Ratio, which is derived from it
-    # — is identical across every simulation and only needs to be computed
-    # once, sequentially, instead of once per path.
+    
     volume_history = data["Volume"].tail(150).to_numpy(dtype=float).tolist()
     volume_ratio_by_day = []
     for _ in range(FORECAST_DAYS):
@@ -496,10 +456,7 @@ if needs_regeneration:
         volume_ratio_by_day.append(volume_history[-1] / volume_ma20)
         volume_history.append(volume_ma20)
 
-    # Only the trailing window needed for the longest rolling feature
-    # (Momentum90) plus buffer — nothing looks back further than 90 days.
-    # Every simulation starts from the same real history and diverges as
-    # each day's predicted returns are applied.
+    
     close_paths = np.tile(
         data["Close"].tail(150).to_numpy(dtype=float), (N_SIMULATIONS, 1)
     )
@@ -550,7 +507,7 @@ else:
     print("Loaded", len(forecast_df), "saved predictions.")
 
 
-# CLEAN 3-MONTH FORECAST TABLE
+#clean 3-month forecast table
 
 table = forecast_df[["Date", "Lower_90", "Median_Predicted_Close", "Upper_90"]].copy()
 table.columns = ["Date", "Low (5%)", "Predicted", "High (95%)"]
@@ -562,9 +519,10 @@ print("\n")
 print(f"3-MONTH FORECAST TABLE ({len(table)} trading days)")
 print(table.to_string(index=False))
 
-# GRAPH: NEXT 3 MONTHS ONLY — ACTUAL UP TO TODAY + FORECAST
+# graph
 
-recent_actual = data["Close"].tail(40)  # a short lead-in for context
+ # a short lead-in for context
+recent_actual = data["Close"].tail(40) 
 
 plt.figure(figsize=(14, 7))
 plt.plot(recent_actual.index, recent_actual.values, label="Actual Close (up to today)", linewidth=2.5, color="black")
@@ -588,7 +546,7 @@ plt.show(block=False)
 plt.pause(0.001)
 
 
-# PLOT: RECENT ACTUAL PRICE + FORECAST FAN CHART (WIDER CONTEXT)
+# plot: recent actual price + forecast fan chart
 
 recent_actual_wide = data["Close"].tail(120)
 
@@ -614,7 +572,7 @@ plt.show()
 print(f"\nAll charts saved as PNG files in: {CHARTS_DIR}")
 
 
-# CHECK ACTUAL PRICES AGAINST THE FORECAST BAND
+# actual prices: check against forecast band
 
 
 print("\n")
@@ -646,7 +604,7 @@ else:
     else:
         actual_data = pd.DataFrame(columns=["Date", "Close"])
 
-# COMPARE: DID THE ACTUAL PRICE FALL INSIDE THE 90% BAND?
+# checking to see if the actual price fell inside the 90% band?
 
 
 if not actual_data.empty:
@@ -671,12 +629,7 @@ else:
 
 
 
-# KEY HORIZON SUMMARY: 5-DAY / 1-MONTH / 3-MONTH
 
-# Trading-day approximations: ~5 trading days = 1 week, ~21 = 1 month,
-# and the full FORECAST_DAYS (63) = ~3 months. Each is reported as both a
-# price and a % change from today's actual close, with the 90% band so
-# it's clear how much uncertainty surrounds each horizon.
 
 horizons = {
     "5-Day Prediction": 5,
@@ -706,7 +659,7 @@ for label, trading_days_ahead in horizons.items():
     print(f"  90% range: ${low_price:.2f} to ${high_price:.2f}  ({low_pct:+.2f}% to {high_pct:+.2f}%)")
     print()
 
-# EXPORT EVERYTHING FOR THE WEBSITE
+
 
 
 import json
@@ -900,7 +853,7 @@ def horizon_information(days):
             )
     }
 
-# BUILD COMPLETE WEBSITE DATA
+
 
 website_data = {
 
@@ -976,7 +929,7 @@ website_data = {
                 )
         },
 
-        # NEXT-DAY ML PREDICTION
+        #next-day prediction
 
         "nextDayPrediction": {
 
@@ -999,7 +952,7 @@ website_data = {
                 )
         },
 
-        # MODEL PERFORMANCE
+        # model performance
 
         "modelPerformance": {
 
@@ -1037,7 +990,7 @@ website_data = {
                 )
         },
 
-        # GRAPHS
+        # graphs
 
         "closePriceHistory":
             close_price_history,
@@ -1070,7 +1023,7 @@ website_data = {
         },
 
 
-        # 5 DAY / 1 MONTH / 3 MONTH
+        # 5 days / 1 month / 3 months
 
 
         "horizonSummary": {
@@ -1090,7 +1043,7 @@ website_data = {
 }
 
 
-# WRITE stock_data.js
+# write stock_data.js
 
 OUTPUT_FILE = os.path.join(
     os.path.dirname(
