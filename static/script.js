@@ -1,5 +1,4 @@
-// Talks to the Flask API (app.py): /api/search for suggestions and
-// /api/stock/<symbol> for the full dashboard payload. No local data files.
+
 
 const searchInput = document.getElementById("stock-search");
 const suggestionsBox = document.getElementById("suggestions");
@@ -21,7 +20,6 @@ document.addEventListener("DOMContentLoaded", () => {
   renderQuickPicks();
 });
 
-// ---------- Helpers ----------
 
 function setStatus(message, isError = false) {
   statusEl.textContent = message || "";
@@ -74,7 +72,6 @@ function chartOptions(xTitle = "Date", yTitle = "Price (USD)") {
   };
 }
 
-// ---------- Quick picks ----------
 
 function renderQuickPicks() {
   quickPicksBox.innerHTML = "";
@@ -98,7 +95,7 @@ function markActiveChip(symbol) {
   });
 }
 
-// ---------- Search (talks to /api/search) ----------
+
 
 searchInput.addEventListener("input", () => {
   const query = searchInput.value.trim();
@@ -170,7 +167,7 @@ function hideSuggestions() {
   suggestionsBox.innerHTML = "";
 }
 
-// ---------- Loading a stock (talks to /api/stock/<symbol>) ----------
+
 
 async function loadStock(symbolOrQuery) {
   const requestId = ++activeRequestId;
@@ -181,7 +178,7 @@ async function loadStock(symbolOrQuery) {
     const response = await fetch(`/api/stock/${encodeURIComponent(symbolOrQuery)}`);
     const data = await response.json();
 
-    // a slower request that finished after a newer one was kicked off
+
     if (requestId !== activeRequestId) return;
 
     if (!response.ok) {
@@ -197,7 +194,7 @@ async function loadStock(symbolOrQuery) {
   }
 }
 
-// ---------- Rendering ----------
+
 
 let charts = {};
 
@@ -212,7 +209,7 @@ function renderCompany(company) {
 
   document.title = `${company.companyName} (${company.symbol}) | Stock Prices, Predictions and Changes`;
 
-  // HEADER
+
   document.getElementById("company-name").textContent = company.companyName;
   document.getElementById("company-symbol").textContent = company.symbol;
   document.getElementById("price").textContent = money(company.today.close);
@@ -225,13 +222,13 @@ function renderCompany(company) {
   changeEl.classList.toggle("positive", change >= 0);
   changeEl.classList.toggle("negative", change < 0);
 
-  // TODAY'S STATS
+  // statistics for today
   document.getElementById("stat-open").textContent = money(company.today.open);
   document.getElementById("stat-prev-close").textContent = money(company.today.previousClose);
   document.getElementById("stat-range").textContent = `${money(company.today.low)} – ${money(company.today.high)}`;
   document.getElementById("stat-volume").textContent = volume(company.today.volume);
 
-  // NEXT DAY PREDICTION
+  // next-day prediction
   document.getElementById("outlook-next-close").textContent = money(company.nextDayPrediction.predictedClose);
   const predictedChange = company.nextDayPrediction.predictedChangePercent;
   const nextChangeEl = document.getElementById("outlook-next-change");
@@ -239,17 +236,17 @@ function renderCompany(company) {
   nextChangeEl.classList.toggle("positive", predictedChange >= 0);
   nextChangeEl.classList.toggle("negative", predictedChange < 0);
 
-  // HORIZONS
+  // horizons
   renderHorizon("horizon-5day", "horizon-5day-range", company.horizonSummary && company.horizonSummary.fiveDay);
   renderHorizon("horizon-1month", "horizon-1month-range", company.horizonSummary && company.horizonSummary.oneMonth);
   renderHorizon("horizon-3month", "horizon-3month-range", company.horizonSummary && company.horizonSummary.threeMonth);
 
-  // FORECAST INFO
+  // forecast information
   document.getElementById("simulation-count").textContent = company.forecastInfo ? company.forecastInfo.simulations : "—";
   document.getElementById("forecast-days").textContent = company.forecastInfo ? company.forecastInfo.forecastDays : "—";
   document.getElementById("forecast-generated-date").textContent = company.forecastInfo ? company.forecastInfo.generatedFromDate : "—";
 
-  // MODEL PERFORMANCE
+  // performance of the model
   const perf = company.modelPerformance;
   document.getElementById("perf-mae").textContent = perf.mae.toFixed(5);
   document.getElementById("perf-baseline-mae").textContent = perf.baselineMae.toFixed(5);
