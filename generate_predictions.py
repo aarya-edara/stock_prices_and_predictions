@@ -113,16 +113,17 @@ test_results = pd.DataFrame(
     index=test.index,
 )
 
-# ---------------------------------------------------------------------------
+
 # Feature importance
-# ---------------------------------------------------------------------------
+
 importance = pd.Series(model.feature_importances_, index=predictors).sort_values(
     ascending=False
 )
 
-# ---------------------------------------------------------------------------
-# Yesterday -> today change (the two most recent actual trading days)
-# ---------------------------------------------------------------------------
+
+# yesterday-to-today change (or just the two most recent actual trading days)
+
+
 today_close = float(data["Close"].iloc[-1])
 yesterday_close = float(data["Close"].iloc[-2])
 today_date = data.index[-1].strftime("%Y-%m-%d")
@@ -133,22 +134,17 @@ today_volume = int(data["Volume"].iloc[-1])
 day_change = today_close - yesterday_close
 day_change_pct = (day_change / yesterday_close) * 100
 
-# ---------------------------------------------------------------------------
+
 # Next-day model prediction
-# ---------------------------------------------------------------------------
+
 latest = data.dropna(subset=predictors).iloc[[-1]]
 next_return_prediction = model.predict(latest[predictors])[0] + bias
 next_close_prediction = today_close * (1 + next_return_prediction)
 
-# ---------------------------------------------------------------------------
-# Recursive 3-month (63 trading day) forecast.
-# IMPORTANT: this feeds each day's predicted close back in as if it were
-# real to build the next day's features. Errors compound with every step —
-# treat this as illustrative, not a reliable long-range forecast. Accuracy
-# degrades a lot the further out you go; the model was only ever trained
-# and validated on one-day-ahead predictions.
-# ---------------------------------------------------------------------------
-FORECAST_DAYS = 63  # ~3 months of trading days
+
+
+# around 3 months of trading days
+FORECAST_DAYS = 63 
 
 working = data.copy()
 forecast = []
@@ -161,9 +157,7 @@ for _ in range(FORECAST_DAYS):
     next_close = last_close * (1 + pred_return)
     next_date = latest_row.index[0] + pd.tseries.offsets.BDay(1)
 
-    # append a synthetic next row using the predicted close, assume volume
-    # stays near its recent average, then recompute engineered features so
-    # the next loop iteration has valid inputs
+    
     new_row = pd.DataFrame(
         {"Close": [next_close], "Volume": [working["Volume"].tail(20).mean()]},
         index=[next_date],
@@ -175,13 +169,7 @@ for _ in range(FORECAST_DAYS):
         {"date": next_date.strftime("%Y-%m-%d"), "predictedClose": round(next_close, 2)}
     )
 
-# ---------------------------------------------------------------------------
-# Prediction timeline: 2020 through today, using the model's predictions on
-# every row (not just the held-out test set), so this is a mix of in-sample
-# and out-of-sample predictions — useful for a visual "how'd the model track
-# the price over time" chart, but NOT the same as the honest test-set
-# accuracy numbers above (those only come from the test split).
-# ---------------------------------------------------------------------------
+
 all_predicted_returns = model.predict(model_data[predictors]) + bias
 all_predicted_close = model_data["Close"] * (1 + all_predicted_returns)
 
@@ -210,10 +198,6 @@ for row in forecast:
         {"date": row["date"], "actual": None, "predicted": row["predictedClose"]}
     )
 
-# ---------------------------------------------------------------------------
-# Load any existing data file so re-running for a different SYMBOL adds to it
-# instead of wiping out companies you've already generated.
-# ---------------------------------------------------------------------------
 existing = {}
 try:
     with open(OUTPUT_FILE, "r") as f:
