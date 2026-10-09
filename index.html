@@ -4,7 +4,7 @@
 <head>
 
 
-<!-- FOR URL GO TO GITHUB PAGES OR SOMETHING -->
+
 
 
     <meta charset="UTF-8">
@@ -17,56 +17,33 @@
 
     <link rel="stylesheet" href="style.css">
 
-
-
-
-    <!-- BASIC WEBSITE SETTINGS -->
-
-    <!-- Character encoding -->
     <meta charset="UTF-8">
 
-    <!-- Makes website work properly on phones/tablets -->
+    
     <meta name="viewport"
           content="width=device-width, initial-scale=1.0">
 
-    <!-- Name shown in browser tab -->
     <title>Predicting stocks for every company.</title>
 
 
-    <!-- BROWSER COLOUR SETTINGS -->
-
-    <!-- Browser colour in light mode -->
     <meta name="theme-color"
           content="#ffffff"
           media="(prefers-color-scheme: light)">
 
-    <!-- Browser colour in dark mode -->
     <meta name="theme-color"
           content="#222530"
           media="(prefers-color-scheme: dark)">
 
 
-    <!-- NO LOGO / FAVICON YET -->
-
-    <!--
-    Add this later when you have your own icon:
-
-    <link rel="icon" type="image/png" href="images/favicon.png">
-    -->
-
-
-    <!-- CSS -->
 
     <style>
-
-        /* Remove browser's default spacing */
         body {
             margin: 0;
             font-family: Arial, sans-serif;
         }
 
 
-        /* TOP NAVIGATION BAR */
+
 
         .top-nav {
             width: 100%;
@@ -94,11 +71,6 @@
             color: #ff57d6;
         }
 
-
-
-
-        /* Navigation links */
-
         .nav-links {
             display: flex;
             align-items: center;
@@ -118,15 +90,11 @@
         }
 
 
-        /* Change colour when mouse goes over link */
 
         .nav-links a:hover {
             color: #00ffe4;
         }
 
-
-
-        /* MAIN SEARCH BAR */
 
         .home-search {
             position: relative;
@@ -135,9 +103,6 @@
 
             margin: 80px auto 30px auto;
         }
-
-
-        /* Search icon */
 
         .home-search .search-icon {
             position: absolute;
@@ -150,9 +115,6 @@
             font-size: 24px;
             color: #666666;
         }
-
-
-        /* Search input */
 
         .home-search input {
             width: 100%;
@@ -169,15 +131,12 @@
             outline: none;
         }
 
-        /* When user clicks search */
+
 
         .home-search input:focus {
             border-color: #555555;
         }
 
-
-
-        /* SEARCH RESULTS DROPDOWN */
 
         .search-results {
             position: absolute;
@@ -214,7 +173,6 @@
             background: #f2f2f2;
         }
 
-        /* SUGGESTED COMPANIES */
 
         .suggestions {
             max-width: 700px;
@@ -251,8 +209,6 @@
 
 
 
-        /* FOOTER */
-
         footer {
             margin-top: 0;
 
@@ -270,7 +226,6 @@
     <nav class="top-nav">
 
 
-        <!-- Website name on LEFT -->
 
         <a href="index.html"
            class="site-name">
@@ -279,9 +234,6 @@
 
         </a>
 
-
-
-        <!-- Navigation links on RIGHT -->
 
         <ul class="nav-links">
 
@@ -320,9 +272,6 @@
 
         <div class="home-search">
 
-            <!-- Search icon
-                 Replace this later if you want a custom icon -->
-
             <span class="search-icon">
                 <svg
                     width="20"
@@ -338,10 +287,6 @@
                     <line x1="16" y1="16" x2="21" y2="21"></line>
                 </svg>
             </span>
-
-
-
-            <!-- Company search box -->
 
             <input
                 aria-label="Search for a company"
@@ -378,24 +323,17 @@
     </main>
 
 <script>
-    // Get the search box
+
     const searchBox = document.getElementById("company-search");
 
-    // Run when the user presses a key
     searchBox.addEventListener("keydown", function(event) {
 
-        // Only search when Enter is pressed
         if (event.key === "Enter") {
 
-            // Get what the user typed
             let search = searchBox.value.toLowerCase().trim();
 
-            // Remove spaces and hyphens
-            // "Coca Cola" -> "cocacola"
-            // "Coca-Cola" -> "cocacola"
             search = search.replace(/[\s-]/g, "");
 
-            // Check accepted Coca-Cola searches
             if (
                 search === "cocacola" ||
                 search === "cola" ||
