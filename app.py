@@ -9,7 +9,7 @@ import yfinance as yf
 
 app = Flask(__name__)
 
-# A small fallback list is used if Yahoo's search does not return usable results.
+
 FALLBACK_COMPANIES = [
     {"symbol": "KO", "name": "The Coca-Cola Company"},
     {"symbol": "AAPL", "name": "Apple Inc."},
@@ -51,15 +51,14 @@ PREDICTORS = [
     "Return_Lag3",
 ]
 
-FORECAST_DAYS = 63       # ~3 months of trading days
-N_SIMULATIONS = 300      # number of simulated future paths
+# around 3 months of trading days
+FORECAST_DAYS = 63  
+# number of simulated future paths
+N_SIMULATIONS = 300
 
-# In-memory caches, keyed to the latest trading day so they auto-regenerate
-# once new data comes in, but repeated requests for the same symbol on the
-# same day reuse the (slow) trained model + Monte Carlo run instead of
-# recomputing everything from scratch.
-STOCK_RESPONSE_CACHE = {}   # {symbol: {"asOf": "YYYY-MM-DD", "response": {...}}}
-COMPANY_NAME_CACHE = {}     # {symbol: name} — company names rarely change
+
+STOCK_RESPONSE_CACHE = {} 
+COMPANY_NAME_CACHE = {}
 
 
 def flatten_yfinance_columns(data):
@@ -118,13 +117,7 @@ def company_name_for(symbol):
 
 
 def _close_features_batch(close_paths, volume_ratio):
-    """
-    Vectorized equivalent of add_features()'s price-derived columns, for a
-    batch of simulated close-price histories (rows = simulations, columns =
-    trailing days, most recent last, i.e. column -1 is "today"). Volume_Ratio
-    is passed in directly since it's identical across every simulation (see
-    run_monte_carlo_forecast) rather than recomputed per path.
-    """
+
     returns = np.diff(close_paths, axis=1) / close_paths[:, :-1]
     close = close_paths[:, -1]
 
@@ -156,29 +149,11 @@ def _close_features_batch(close_paths, volume_ratio):
 
 
 def run_monte_carlo_forecast(model, data, train, current_close):
-    """
-    Runs an N_SIMULATIONS-path Monte Carlo simulation to produce a 3-month
-    forecast band (median + 90% confidence interval), plus a 5-day / 1-month
-    / 3-month horizon summary. This is the slow part of a stock request —
-    callers should cache the result per symbol per trading day.
 
-    All simulations are advanced together, one trading day at a time, with a
-    single batched model.predict() call per day (N_SIMULATIONS rows) instead
-    of one call per simulation per day. A single-row RandomForest predict()
-    has enough fixed overhead that N_SIMULATIONS * FORECAST_DAYS individual
-    calls cost minutes; one call per day over a small batch costs well under
-    a second, since the per-call overhead is paid once instead of ~19,000
-    times.
-    """
     train_predictions_for_bias = model.predict(train[PREDICTORS])
     bias = (train["Tomorrow_Return"] - train_predictions_for_bias).mean()
     residuals = (train["Tomorrow_Return"] - train_predictions_for_bias - bias).values
 
-    # Volume never depends on the simulated price, and every path estimates
-    # each future day's volume the same way (mean of the trailing 20 days),
-    # so the volume trajectory — and Volume_Ratio, which is derived from it
-    # — is identical across every simulation and only needs to be computed
-    # once, sequentially, instead of once per path.
     volume_history = data["Volume"].tail(150).to_numpy(dtype=float).tolist()
     volume_ratio_by_day = []
     for _ in range(FORECAST_DAYS):
@@ -186,10 +161,6 @@ def run_monte_carlo_forecast(model, data, train, current_close):
         volume_ratio_by_day.append(volume_history[-1] / volume_ma20)
         volume_history.append(volume_ma20)
 
-    # Only the trailing window needed for the longest rolling feature
-    # (Momentum90) plus buffer — nothing looks back further than 90 days.
-    # Every simulation starts from the same real history and diverges as
-    # each day's predicted returns are applied.
     close_paths = np.tile(
         data["Close"].tail(150).to_numpy(dtype=float), (N_SIMULATIONS, 1)
     )
@@ -268,7 +239,7 @@ def search():
 
     results = []
 
-    # Search Yahoo Finance without an API key.
+    # Search Yahoo Finance without the API key
     try:
         search_result = yf.Search(query, max_results=8)
         for quote in search_result.quotes:
@@ -288,7 +259,7 @@ def search():
     except Exception:
         pass
 
-    # Fallback suggestions for common stocks.
+    # Fallback suggestions for common stocks
     if not results:
         q = query.lower()
         for company in FALLBACK_COMPANIES:
@@ -299,7 +270,7 @@ def search():
                     "exchange": ""
                 })
 
-    # Remove duplicates.
+    # Remove duplicates
     unique = []
     seen = set()
 
@@ -336,9 +307,7 @@ def stock(symbol):
         if not required.issubset(set(data.columns)):
             return jsonify({"error": "Yahoo Finance returned incomplete data."}), 500
 
-        # Yahoo sometimes returns a trailing row for the current, still-in-
-        # progress trading day with a Volume figure but no OHLC yet — drop
-        # any such incomplete rows so "latest close" isn't NaN.
+        
         data = data.dropna(subset=["Close"])
 
         if data.empty:
@@ -377,7 +346,7 @@ def stock(symbol):
 
         predicted_returns = model.predict(test[PREDICTORS])
 
-        # Same bias correction idea used in your previous generator.
+ 
         train_predictions = model.predict(train[PREDICTORS])
         bias = (
             train["Tomorrow_Return"] - train_predictions
