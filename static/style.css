@@ -569,7 +569,7 @@ canvas {
   font-size: 0.9em;
 }
 
-/* PREDICTION CARDS */
+/* the prediction cards */
 
 .prediction-grid {
     display: grid;
@@ -630,9 +630,7 @@ canvas {
 }
 
 
-/* =========================================================
-   INFORMATION TABLES
-   ========================================================= */
+/* information tables */
 
 .info-table {
     width: 100%;
@@ -669,9 +667,7 @@ canvas {
 }
 
 
-/* =========================================================
-   NORMAL TABLES
-   ========================================================= */
+/* normal tables */
 
 .table-container {
     width: 100%;
@@ -722,7 +718,7 @@ canvas {
 }
 
 
-/* CHART PANELS */
+/* chart panels */
 
 .chart-section {
     margin-top: 4rem;
@@ -748,7 +744,7 @@ canvas {
 }
 
 
-/* MODEL COMPARISON */
+/* model comparison */
 
 .model-comparison {
     margin-top: 1rem;
@@ -763,7 +759,7 @@ canvas {
 }
 
 
-/* MOBILE */
+/* for mobile viewing */
 
 @media (max-width: 700px) {
 
