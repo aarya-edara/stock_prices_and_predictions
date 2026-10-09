@@ -7,14 +7,6 @@ import datetime
 import numpy as np
 import json
 
-# ---------------------------------------------------------------------------
-# This script replaces generate_predictions.py. It runs your whole pipeline
-# once and writes ONE data file (stock_data.js) with everything the website
-# needs: closing price history, actual-vs-predicted charts, feature
-# importance, and yesterday-vs-today stats. No API key, no live search —
-# the website just reads this file directly.
-# ---------------------------------------------------------------------------
-
 SYMBOL = "KO"
 COMPANY_NAME = "The Coca-Cola Company"
 OUTPUT_FILE = "stock_data.js"
@@ -27,18 +19,10 @@ data = yf.download(SYMBOL, start="1990-01-01", end=tomorrow, auto_adjust=True)
 if isinstance(data.columns, pd.MultiIndex):
     data.columns = data.columns.get_level_values(0)
 
-# Yahoo sometimes returns a trailing row for the current, still-in-progress
-# trading day with a Volume figure but no OHLC yet — drop any such
-# incomplete rows so "latest close" isn't NaN.
 data = data.dropna(subset=["Close"])
 
 data.index.name = "Date"
 
-# ---------------------------------------------------------------------------
-# Feature engineering (same as your original script), wrapped in a function
-# so it can be re-run on an extended dataframe during the recursive forecast
-# below.
-# ---------------------------------------------------------------------------
 def add_features(df):
     df = df.copy()
     df["Return"] = df["Close"].pct_change()
